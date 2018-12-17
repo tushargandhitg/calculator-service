@@ -19,4 +19,5 @@ public class CalculatorServiceApplication {
 	public RestTemplate restTemplate() {
 		return new RestTemplate();
 	}
+	
 }

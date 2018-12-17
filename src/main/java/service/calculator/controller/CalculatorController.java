@@ -28,15 +28,20 @@ public class CalculatorController {
 	}
 	
 	@RequestMapping(value="/api/v1/evaluateoperation", method=RequestMethod.GET)
-	public Double evaluateOperation(
+	public String evaluateOperation(
 			@RequestParam(value="userid") Integer userid,
 			@RequestParam(value="operation") String operation,
 			@RequestParam(value="value1") Double value1,
 			@RequestParam(value="value2") Double value2
 			) {
 		
-		return executionService.performExecution(operation, userid, value1, value2);
+		Double result = executionService.performExecution(operation, userid, value1, value2);
+		if(result != -999999.99999 ) {
+			
+			return result.toString();
+		}
 		
+		return null;
 	}
 	
 	
