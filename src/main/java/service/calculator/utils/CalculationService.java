@@ -41,7 +41,7 @@ public class CalculationService {
 	@Value("${service.multiply.port}")
 	private String multiplicationPort;
 	
-	@Value("${service.multiply.subtractionUrl}")
+	@Value("${service.multiply.multiplicationUrl}")
 	private String multiplicationUrlPath;
 	
 	@Value("${service.divide.url}")

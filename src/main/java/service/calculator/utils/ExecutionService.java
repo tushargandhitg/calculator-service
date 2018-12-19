@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -16,7 +17,10 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class ExecutionService {
 
 	@Autowired
-	CalculationService calculationService;
+	private CalculationService calculationService;
+	
+	@Autowired
+	private RedisTemplate<String, Object> redisTemplate;
 	
 	@Autowired
 	RestTemplate restTemplate;
@@ -59,8 +63,17 @@ public class ExecutionService {
 		// update db
 		updateCurrentCredits(userid, updatedUserCredits);
 		
+		// set/update cache redis
+		updateCacheRedis(userid,updatedUserCredits);
+		
 		// return result
 		return evaluateOperationResult(operation,value1, value2);
+	}
+	
+	private boolean updateCacheRedis(Integer userid, Double credits) {
+		
+		redisTemplate.opsForValue().set("user_"+userid.toString(), credits);
+		return true;
 	}
 	
 	private Double evaluateOperationResult(String operation, Double value1, Double value2) {
@@ -96,7 +109,7 @@ public class ExecutionService {
 			url = url + ":"+Integer.toString(port)+creditUrl;
 			
 			MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
-			queryParams.add("value1", Integer.toString(userid));
+			queryParams.add("userid", Integer.toString(userid));
 			
 			UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(url);
 			builder.queryParams(queryParams);

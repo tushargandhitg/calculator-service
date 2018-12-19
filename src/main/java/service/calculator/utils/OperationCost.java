@@ -2,14 +2,16 @@ package service.calculator.utils;
 
 import javax.persistence.Entity;
 import javax.persistence.Id;
+import javax.persistence.Table;
 
 @Entity
+@Table(name="operationcost")
 public class OperationCost {
 
 	@Id
 	private String operation;
 	
-	private double cost;
+	private Double cost;
 
 	public OperationCost() {}
 	

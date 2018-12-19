@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import service.calculator.utils.AddCredits;
 import service.calculator.utils.CalculationService;
 import service.calculator.utils.ExecutionService;
 
@@ -18,6 +19,9 @@ public class CalculatorController {
 	@Autowired
 	private CalculationService calculationService;
 	
+	@Autowired
+	private AddCredits addCredtis;
+	
 	@RequestMapping(value="/api/v1/calculate", method=RequestMethod.GET)
 	public Double calculateResult(
 			@RequestParam(value="value1", required=true) double value1,
@@ -25,6 +29,17 @@ public class CalculatorController {
 			@RequestParam(value="operation", required=true) String operation
 			) {
 		return calculationService.performOperation(operation, value1, value2);
+	}
+	
+	@RequestMapping(value="/api/v1/addcredit")
+	public boolean updateCredits(
+			@RequestParam(value="userid") Integer userid,
+			@RequestParam(value="credits") Double credits
+			) {
+		
+		addCredtis.addCredits(userid, credits);
+		
+		return true;
 	}
 	
 	@RequestMapping(value="/api/v1/evaluateoperation", method=RequestMethod.GET)
