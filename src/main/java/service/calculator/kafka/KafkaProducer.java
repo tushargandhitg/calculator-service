@@ -16,7 +16,7 @@ public class KafkaProducer {
 	String kafkaTopic = "test";
 	
 	public void send(String data) {
-	    log.info("sending data='{}'", data);
+	    log.info("sending data to kafka topic = '{}'", data);
 	    
 	    kafkaTemplate.send(kafkaTopic, data);
 	}

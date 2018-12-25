@@ -10,69 +10,98 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import com.google.gson.Gson;
+
+import service.calculator.kafka.KafkaMessage;
+import service.calculator.kafka.KafkaProducer;
+import service.calculator.responses.SuccessResponse;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class ExecutionService {
 
+	private final Logger logger = LoggerFactory.getLogger(ExecutionService.class);
+	
 	@Autowired
 	private CalculationService calculationService;
 	
 	@Autowired
-	private RedisTemplate<String, Object> redisTemplate;
+	private RedisTemplate<String, String> redisTemplate;
 	
 	@Autowired
 	RestTemplate restTemplate;
-	
+
 	@Autowired
 	private OperationCostRepository operationCostRepo;
 	
 	@Value("${service.user.url}")
 	private String url;
 	
+	@Autowired
+	private KafkaProducer kafkaProducer;
+	
 	@Value("${service.user.port}")
 	private int port;
 	
-	@Value("${service.user.credits}")
-	private String creditUrl;
-	
-	@Value("${service.user.email}")
-	private String emailUrl;
+	@Value("${service.user.user-details}")
+	private String userDetailsUrl;
 	
 	@Value("${service.user.updateCredits}")
 	private String updateCreditUrl;
 	
-	public Double performExecution(String operation, Integer userid, Double value1, Double value2) {
+	public String performExecution(String operation, Integer userid, Double value1, Double value2) {
 		
+		Gson json = new Gson();
 		// get cost of operation
 		Optional<OperationCost> findByIdResult = operationCostRepo.findById(operation);
 		Double cost = findByIdResult.get().getCost();
 		
 		// get current credits
-		Double currentCredits = getCurrentCredits(userid);
+		User userDetails = getCurrentUserInfo(userid);
+		Double currentCredits = userDetails.getCredits();
 		
 		// check eligibility if feasible
 		if(!isOperationFeasible(currentCredits, cost)) {
-			return -999999.99999;
+			SuccessResponse response = new SuccessResponse();
+			response.setMessage("Operation not feasible. Low credits detected");
+			response.setSuccessFlag(false);
+			return json.toJson(response);
 		}
 		
 		// perform operation
 		Double updatedUserCredits = currentCredits - cost;
-			
+		userDetails.setCredits(updatedUserCredits);
 		// update db
 		updateCurrentCredits(userid, updatedUserCredits);
 		
 		// set/update cache redis
-		updateCacheRedis(userid,updatedUserCredits);
+		updateCacheRedis(userid,userDetails);
 		
 		// return result
-		return evaluateOperationResult(operation,value1, value2);
+		Double result = evaluateOperationResult(operation,value1, value2);
+		SuccessResponse response = new SuccessResponse(result,"success",true);
+		
+		// prepare message for kafka topic and push it to the topic
+		KafkaMessage message = new KafkaMessage(updatedUserCredits, cost, "Operation Successful", 
+				userDetails.getEmail(), operation);
+		
+		kafkaProducer.send(json.toJson(message));
+		
+		return json.toJson(response);
 	}
 	
-	private boolean updateCacheRedis(Integer userid, Double credits) {
-		
-		redisTemplate.opsForValue().set("user_"+userid.toString(), credits);
+	private boolean updateCacheRedis(Integer userid, User userDetails) {
+
+		Gson json = new Gson();
+		String jsonData = json.toJson(userDetails);
+		redisTemplate.opsForValue().set("user_"+userid, jsonData);
 		return true;
 	}
 	
@@ -92,30 +121,49 @@ public class ExecutionService {
 		
 		private void updateCurrentCredits(Integer userid, Double credits) {
 			
-			url = url + ":"+Integer.toString(port)+updateCreditUrl;
+			String finalUrl = url + ":"+Integer.toString(port)+updateCreditUrl;
 			
-			MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
-			queryParams.add("userid", Integer.toString(userid));
-			queryParams.add("credits", Double.toString(credits));
+			UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(finalUrl);
+			builder.queryParam("userid", userid);
+			builder.queryParam("credits", credits);
 			
-			UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(url);
-			builder.queryParams(queryParams);
-			
-			restTemplate.exchange(builder.build(false).toUri(), HttpMethod.GET, null, Double.class);
+			restTemplate.exchange(builder.build(false).toUri(), HttpMethod.GET, null, Boolean.class);
 		}
 	
-		private Double getCurrentCredits(Integer userid) {
+		private User getCurrentUserInfo(Integer userid) {
 			
-			url = url + ":"+Integer.toString(port)+creditUrl;
+			// check data from cache
+			String userDetails = redisTemplate.opsForValue().get("user_"+userid);
+
+			// if no data in cache is found, read from user-service
+			if(  StringUtils.isEmpty(userDetails)) {
+				userDetails = getUserDetailsFromDB(userid);
+			}
+			
+			Gson gson = new Gson();
+			User user = gson.fromJson(userDetails, User.class);
+			return user;
+			
+			
+		}
+
+		private String getUserDetailsFromDB(Integer userid) {
+			String finalUrl = url + ":"+Integer.toString(port)+userDetailsUrl;
 			
 			MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
 			queryParams.add("userid", Integer.toString(userid));
 			
-			UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(url);
+			UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(finalUrl);
 			builder.queryParams(queryParams);
+			ResponseEntity<String> responseEntity = null;
 			
-			ResponseEntity<Double> responseEntity = restTemplate.exchange(builder.build(false).toUri(), HttpMethod.GET, null, Double.class);
-			
+			try {
+				responseEntity = restTemplate.exchange(builder.build(false).toUri(), HttpMethod.GET,
+						null, String.class);
+			} catch (RestClientException e) {
+	
+				logger.error("Response Failure from user-detail service", e);
+			}
 			return responseEntity.getBody();
 		}
 }
