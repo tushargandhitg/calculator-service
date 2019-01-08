@@ -1,5 +1,7 @@
 package service.calculator.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,16 +15,23 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import com.google.gson.Gson;
 
+import service.calculator.controller.CalculatorController;
 import service.calculator.kafka.KafkaMessage;
 import service.calculator.kafka.KafkaProducer;
 import service.calculator.responses.AddCreditResponse;
+import service.calculator.responses.ErrorResponse;
 
 @Service
 public class AddCredits {
 
+	private final Logger logger = LoggerFactory.getLogger(CalculatorController.class);
+	
 	@Autowired
 	private RestTemplate restTemplate;
 
+	@Autowired
+	private UtilityMethods utilityMethods;
+	
 	@Autowired
 	private KafkaProducer kafkaProducer;
 	
@@ -40,6 +49,17 @@ public class AddCredits {
 	
 	public String addCredits(Integer userid, Double credits) {
 		
+		Gson json = new Gson();
+		if( credits < 0 ) {
+			logger.error("invalid user operation detected.");
+			
+			ErrorResponse response = new ErrorResponse();
+			response.setMessage("Credits can't be negative.");
+			response.setSuccessFlag(false);
+			return json.toJson(response);
+		}
+
+		
 		String finalUrl = url + ":"+Integer.toString(port)+addCreditsUrl;
 		
 		MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
@@ -51,11 +71,20 @@ public class AddCredits {
 		
 		ResponseEntity<String> exchange = restTemplate.exchange(builder.build(false).toUri(), HttpMethod.GET, null, String.class);
 		
-		Gson json = new Gson();
 		User userDetails = json.fromJson(exchange.getBody(), User.class);
 
+		if( userDetails.getUserid() == null ) {
+			ErrorResponse response = new ErrorResponse();
+			response.setMessage("Operation not feasible. Invalid user detected.");
+			response.setSuccessFlag(false);
+			return json.toJson(response);
+		}
+		
 		// update new result set in cache
 		redisTemplate.opsForValue().set("user_"+userDetails.getUserid(), json.toJson(userDetails));
+		
+		// log transaction in db
+		utilityMethods.logTransaction(userid, "update", TransactionStatus.SUCCESS, userDetails.getCredits(), 0.0);
 		
 		// push the data in kafka for notification to user
 		KafkaMessage message = new KafkaMessage(userDetails.getCredits(), 0.0 , "Updation Operation Successful", 

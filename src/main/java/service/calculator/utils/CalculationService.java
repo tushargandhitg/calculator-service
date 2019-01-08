@@ -1,5 +1,7 @@
 package service.calculator.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -7,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -53,11 +55,12 @@ public class CalculationService {
 	@Value("${service.divide.divisionUrl}")
 	private String divisionUrlPath;
 	
+	private final Logger logger = LoggerFactory.getLogger(ExecutionService.class);
 	
 	public CalculationService() {
 	}
 
-	public double performOperation(String operation, Double value1, Double value2) {
+	public Double performOperation(String operation, Double value1, Double value2) {
 
 		try {
 
@@ -73,12 +76,13 @@ public class CalculationService {
 			ResponseEntity<Double> responseEntity = restTemplate.exchange(builder.build(false).toUri(), HttpMethod.GET, null, Double.class);
 
 			return responseEntity.getBody();
-		} catch (HttpStatusCodeException e) {
+		} 
+		catch (ResourceAccessException e) {
 			// TODO Auto-generated catch block
+			logger.error("Unable to connect to the service. Please check if the service is running. Service name : "+operation+" service");
 			e.printStackTrace();
+			return null;
 		}
-
-		return -1;
 	}
 
 	private String urlDecider(String operation) {

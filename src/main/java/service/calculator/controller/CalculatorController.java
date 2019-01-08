@@ -10,6 +10,7 @@ import service.calculator.utils.AddCredits;
 import service.calculator.utils.ExecutionService;
 
 @RestController
+@RequestMapping(value="/calculator")
 public class CalculatorController {
 
 	@Autowired
@@ -20,8 +21,8 @@ public class CalculatorController {
 	
 	@RequestMapping(value="/api/v1/addcredit")
 	public String updateCredits(
-			@RequestParam(value="userid") Integer userid,
-			@RequestParam(value="credits") Double credits
+			@RequestParam(value="userid", required=true) Integer userid,
+			@RequestParam(value="credits", required = true) Double credits
 			) {
 		
 		return addCredtis.addCredits(userid, credits);
@@ -30,10 +31,10 @@ public class CalculatorController {
 	
 	@RequestMapping(value="/api/v1/evaluateoperation", method=RequestMethod.GET)
 	public String evaluateOperation(
-			@RequestParam(value="userid") Integer userid,
-			@RequestParam(value="operation") String operation,
-			@RequestParam(value="value1") Double value1,
-			@RequestParam(value="value2") Double value2
+			@RequestParam(value="userid", required = true) Integer userid,
+			@RequestParam(value="operation", required = true) String operation,
+			@RequestParam(value="value1", required = true) Double value1,
+			@RequestParam(value="value2", required = true) Double value2
 			) {
 		
 		return executionService.performExecution(operation, userid, value1, value2);
